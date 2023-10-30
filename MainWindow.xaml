@@ -1,0 +1,74 @@
+﻿<Window x:Class="DecodingGoldSequence.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+        xmlns:cm="clr-namespace:System.ComponentModel;assembly=System"
+        
+        mc:Ignorable="d"
+        Title="Оценка временной задержки сигналов"
+        RenderOptions.BitmapScalingMode="HighQuality"
+        WindowState="Maximized"
+        FontSize="12" FontFamily="Roboto"
+        Loaded="OnLoadedMainWindow">
+    <Grid Margin="5,0,5,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="45*" />
+            <ColumnDefinition Width="10*" />
+        </Grid.ColumnDefinitions>
+
+        <GroupBox Grid.Column="0" Header="Графики">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <WpfPlot Grid.Row="0" Name="ChartIComponent" FontFamily="JetBrains Mono"/>
+                <WpfPlot Grid.Row="1" Name="ChartQComponent" FontFamily="JetBrains Mono"/>
+                <WpfPlot Grid.Row="2" Name="ChartComplexSignal" FontFamily="JetBrains Mono"/>
+            </Grid>
+        </GroupBox>
+        <StackPanel Grid.Column="1">
+            <GroupBox Header="Параметры моделируемого сигнала">
+                <StackPanel Height="187">
+                    <WrapPanel HorizontalAlignment="Right">
+                        <Label>Число бит</Label>
+                        <xctk:IntegerUpDown Name="BitsCount" 
+                                 TextAlignment="Right" Width="50" Height="25" 
+                                 Minimum="8" Maximum="512" Increment="2" Value="16"/>
+                    </WrapPanel>
+                    <WrapPanel HorizontalAlignment="Right">
+                        <Label>Скорость передачи (бит/с)</Label>
+                        <xctk:IntegerUpDown Name="BaudRate" 
+                                 TextAlignment="Right" Width="50" Height="25" 
+                                 Minimum="10" Maximum="1000" Increment="1" Value="500"/>
+                    </WrapPanel>
+                    <WrapPanel HorizontalAlignment="Right">
+                        <Label>Частота дискретизации (кГц)</Label>
+                        <xctk:DoubleUpDown Name="SamplingFreq"
+                                 TextAlignment="Right" Width="50" Height="25"
+                                 Minimum="0.01" Maximum="1000" Increment=".1" Value="10"/>
+                    </WrapPanel>
+
+                    <WrapPanel HorizontalAlignment="Right">
+                        <Label>Отношение сигнал/шум (дБ)</Label>
+                        <xctk:DoubleUpDown Name="SNR"
+                                 TextAlignment="Right" Width="50" Height="25"
+                                 Minimum="-30" Maximum="30" Increment=".5" Value="-12"/>
+                    </WrapPanel>
+
+                </StackPanel>
+            </GroupBox>
+            <GroupBox Header="Входные биты">
+                <TextBox Name="InputBits"
+                             TextAlignment="Right" VerticalContentAlignment="Center" IsReadOnly="True"
+                             Height="25">
+                    
+                </TextBox>
+            </GroupBox>
+            <Button x:Name="GenerateSignals" Content="Смоделировать сигналы" Click="OnClickGenerateSignals"/>
+        </StackPanel>
+    </Grid>
+</Window>
