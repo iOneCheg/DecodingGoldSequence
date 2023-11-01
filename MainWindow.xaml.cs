@@ -57,6 +57,8 @@ namespace DecodingGoldSequence
             int[] res = GoldCodes.ConvertToGoldSequence(bits, _goldSequences);
             _gS.GetIQComponents(res);
             _gS.MakeNoise((double)SNR.Value);
+            _gS.GetConvolution(_goldSequences);
+            ResultBits.Text =  string.Join("", _gS.DecodeSignal());
 
            ChartIComponent.Plot.Clear();
             ChartIComponent.Plot.AddSignalXY(_gS.I.Select(p => p.X).ToArray(),
@@ -73,6 +75,34 @@ namespace DecodingGoldSequence
                 _gS.ComplexEnvelope.Select(p => p.Y).ToArray(), color: Color.Blue);
             ChartComplexSignal.Refresh();
 
+            ChartConvolution.Plot.Clear();
+            ChartConvolution.Plot.AddSignalXY(
+                _gS.convolutions["00"].Select(p => p.X).ToArray(),
+                _gS.convolutions["00"].Select(p => p.Y).ToArray(),
+                Color.Red,
+                "00"
+            );
+            ChartConvolution.Plot.AddSignalXY(
+                _gS.convolutions["01"].Select(p => p.X).ToArray(),
+                _gS.convolutions["01"].Select(p => p.Y).ToArray(),
+                Color.Green,
+                "01"
+            );
+            ChartConvolution.Plot.AddSignalXY(
+                _gS.convolutions["10"].Select(p => p.X).ToArray(),
+                _gS.convolutions["10"].Select(p => p.Y).ToArray(),
+                Color.Blue,
+                "10"
+            );
+            ChartConvolution.Plot.AddSignalXY(
+                _gS.convolutions["11"].Select(p => p.X).ToArray(),
+                _gS.convolutions["11"].Select(p => p.Y).ToArray(),
+                Color.Indigo,
+                "11"
+            );
+            ChartConvolution.Plot.Legend();
+            ChartConvolution.Refresh();
+
         }
         private void LoadGoldSequences()
         {
@@ -83,10 +113,10 @@ namespace DecodingGoldSequence
 
                 _goldSequences = new Dictionary<string, int[]>
                 {
-                    ["00"] = GoldCodes.GetGoldCode(MSequence1, MSequence2),
-                    ["10"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 1)),
-                    ["01"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 2)),
-                    ["11"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 3))
+                    ["00"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 5)),
+                    ["10"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 8)),
+                    ["01"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 17)),
+                    ["11"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 33))
                 };
             }
         }

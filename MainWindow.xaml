@@ -24,10 +24,12 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <WpfPlot Grid.Row="0" Name="ChartIComponent" FontFamily="JetBrains Mono"/>
                 <WpfPlot Grid.Row="1" Name="ChartQComponent" FontFamily="JetBrains Mono"/>
                 <WpfPlot Grid.Row="2" Name="ChartComplexSignal" FontFamily="JetBrains Mono"/>
+                <WpfPlot Grid.Row="3" Name="ChartConvolution" FontFamily="JetBrains Mono"/>
             </Grid>
         </GroupBox>
         <StackPanel Grid.Column="1">
@@ -66,6 +68,13 @@
                              TextAlignment="Right" VerticalContentAlignment="Center" IsReadOnly="True"
                              Height="25">
                     
+                </TextBox>
+            </GroupBox>
+            <GroupBox Header="Результат восстановления">
+                <TextBox Name="ResultBits"
+                 TextAlignment="Right" VerticalContentAlignment="Center" IsReadOnly="True"
+                 Height="25">
+
                 </TextBox>
             </GroupBox>
             <Button x:Name="GenerateSignals" Content="Смоделировать сигналы" Click="OnClickGenerateSignals"/>

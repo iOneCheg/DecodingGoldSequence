@@ -1,4 +1,6 @@
 ﻿using DevExpress.XtraPrinting.Native;
+using MathNet.Numerics;
+using MathNet.Numerics.IntegralTransforms;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +16,7 @@ namespace DecodingGoldSequence
         private Random? _randomGenerator;
         public List<PointD> I, Q;
         public List<PointD> ComplexEnvelope;
+        public Dictionary<string, List<PointD>> convolutions;
         public int BitsCount { get; set; }
         public int SampleFreq { get; set; }
         public int CarrierFreq { get; set; }
@@ -39,7 +42,11 @@ namespace DecodingGoldSequence
             ComplexEnvelope = new List<PointD>();
 
             int counter = 0;
-            for (int i = 0; i < GoldBits.Length; i += 2)
+            int size = 0;
+            if (GoldBits.Length % 2 == 0) size = GoldBits.Length;
+            else size = GoldBits.Length - 1;
+
+            for (int i = 0; i < size; i += 2)
             {
                 for (int j = 0; j < TBit * 2; j++)
                 {
@@ -51,6 +58,89 @@ namespace DecodingGoldSequence
                     counter++;
                 }
             }
+        }
+        public void GetConvolution(Dictionary<string, int[]> goldCodes)
+        {
+            convolutions = new Dictionary<string, List<PointD>>();
+            int counter = 0;
+            foreach (var k in goldCodes)
+            {
+                List<PointD> signSequence = new List<PointD>();
+                for (int i = 0; i < k.Value.Length - 1; i++)
+                {
+                    int t1 = k.Value[i], t2 = k.Value[i + 1];
+                    for (int j = 0; j < TBit; j++)
+                    {
+                        double temp = (t1 - 0.5) * Math.Cos(2 * Math.PI * CarrierFreq * counter * dt) -
+                            (t2 - 0.5) * Math.Sin(2 * Math.PI * CarrierFreq * counter * dt);
+                        signSequence.Add(new PointD(counter * dt, temp));
+                        counter++;
+                    }
+                }
+                convolutions[k.Key] = new List<PointD>();
+                convolutions[k.Key] = CrossCorrelate(ComplexEnvelope, signSequence);
+            }
+        }
+        public List<string> DecodeSignal()
+        {
+            int signCount = BitsCount / 2,
+                length = convolutions["00"].Count,
+                interval = length / signCount;
+
+            List<string> map = new List<string>();
+            int startEnd = interval / 2;
+            int range = 0;
+            for (int i = 0; i < length;)
+            {
+                if (i == 0 && i == length - interval / 2) range = startEnd;
+                else range = interval;
+
+                Dictionary<string, double> max = new Dictionary<string, double>();
+                foreach (var k in convolutions)
+                {
+                    max[k.Key] = k.Value.GetRange(i, range).Select(p => p.Y).Max();
+                }
+                map.Add(max.MaxBy(kvp=>kvp.Value).Key);
+                if (i == 0 && i == length - interval / 2) i += startEnd;
+                else i += interval;
+            }
+            return map;
+        }
+        public List<PointD> CrossCorrelate(List<PointD> complexFull, List<PointD> filter)
+        {
+
+            int N = Math.Max(complexFull.Count, filter.Count);
+            Complex32[] xComplex = new Complex32[N];
+            Complex32[] yComplex = new Complex32[N];
+
+            for (int i = 0; i < complexFull.Count; i++)
+            {
+                xComplex[i] = new Complex32((float)complexFull[i].Y, 0);
+            }
+
+            for (int i = 0; i < filter.Count; i++)
+            {
+                yComplex[i] = new Complex32((float)filter[i].Y, 0);
+            }
+
+            Fourier.Forward(xComplex);
+            Fourier.Forward(yComplex);
+
+            Complex[] product = new Complex[N];
+            for (int i = 0; i < N; i++)
+            {
+                product[i] = xComplex[i].ToComplex() * Complex.Conjugate(yComplex[i].ToComplex());
+            }
+
+            Fourier.Inverse(product);
+
+            List<PointD> result = new List<PointD>();
+            for (int i = 0; i < N; i++)
+            {
+                result.Add(new PointD(complexFull[i].X, product[i].Real));
+            }
+            return result;
+
         }
         /// <summary>
         /// Наложение шума на сигнал
