@@ -16,6 +16,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using DevExpress.XtraPrinting.Native;
+using System.ComponentModel;
 
 namespace DecodingGoldSequence
 {
@@ -25,11 +27,15 @@ namespace DecodingGoldSequence
     public partial class MainWindow : Window
     {
         Dictionary<string, int[]> _goldSequences;
+        Dictionary<string, object> _gSParameters;
+        Dictionary<string, object> _researchParameters;
+        List<PointD> _snrResearch;
+        private readonly BackgroundWorker _bgResearch;
         public MainWindow()
         {
             InitializeComponent();
             LoadGoldSequences();
-
+            _bgResearch = (BackgroundWorker)FindResource("BackgroundWorkerConductResearch");
         }
 
         private void OnLoadedMainWindow(object sender, RoutedEventArgs e)
@@ -37,17 +43,30 @@ namespace DecodingGoldSequence
             SetUpChart(ChartIComponent, "I", "Время, с", "Амплитуда");
             SetUpChart(ChartQComponent, "Q", "Время, с", "Амплитуда");
             SetUpChart(ChartComplexSignal, "Комплексная огибающая", "Время, с", "Амплитуда");
+            SetUpChart(ChartConvolution, "Отклики согласованных фильтров", "Время, с", "Амплитуда");
+            SetUpChart(ChartResearch, "Зависимость вероятности ошибки определения символа от ОСШ", "Уровень шума, дБ", "Вероятность ошибки");
         }
+        private void UpdateParameters()
+        {
+            var bitsCount = (int)BitsCount.Value;
+            var sampleFreq = (int)SamplingFreq.Value;
+            var baudRate = (int)BaudRate.Value;
+            var carrierFreq = (int)((double)CarrierFreq.Value * 1000);
 
+            _gSParameters = new Dictionary<string, object>
+            {
+                ["bitsCount"] = bitsCount,
+                ["sampleFreq"] = sampleFreq,
+                ["baudRate"] = baudRate,
+                ["carrierFreq"] = carrierFreq
+            };
+        }
 
         private void OnClickGenerateSignals(object sender, RoutedEventArgs e)
         {
-            GenerateSignal _gS = new GenerateSignal();
+            UpdateParameters();
+            GenerateSignal _gS = new GenerateSignal(_gSParameters);
 
-            _gS.BitsCount = (int)BitsCount.Value;
-            _gS.SampleFreq = (int)SamplingFreq.Value;
-            _gS.BaudRate = (int)BaudRate.Value;
-            _gS.CarrierFreq = 500;
             int[] bits = _gS.BitSequence;
 
             var builder = new StringBuilder();
@@ -58,9 +77,15 @@ namespace DecodingGoldSequence
             _gS.GetIQComponents(res);
             _gS.MakeNoise((double)SNR.Value);
             _gS.GetConvolution(_goldSequences);
-            ResultBits.Text =  string.Join("", _gS.DecodeSignal());
+            ResultBits.Text = string.Join("", _gS.DecodeSignal());
 
-           ChartIComponent.Plot.Clear();
+            ChartIComponent.Visibility = Visibility.Visible;
+            ChartQComponent.Visibility = Visibility.Visible;
+            ChartComplexSignal.Visibility = Visibility.Visible;
+            ChartConvolution.Visibility = Visibility.Visible;
+            ChartResearch.Visibility = Visibility.Collapsed;
+
+            ChartIComponent.Plot.Clear();
             ChartIComponent.Plot.AddSignalXY(_gS.I.Select(p => p.X).ToArray(),
                 _gS.I.Select(p => p.Y).ToArray(), color: Color.Blue);
             ChartIComponent.Refresh();
@@ -113,10 +138,10 @@ namespace DecodingGoldSequence
 
                 _goldSequences = new Dictionary<string, int[]>
                 {
-                    ["00"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 5)),
-                    ["10"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 8)),
-                    ["01"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 17)),
-                    ["11"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 33))
+                    ["00"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 0)),
+                    ["10"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 10)),
+                    ["01"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 20)),
+                    ["11"] = GoldCodes.GetGoldCode(MSequence1, GoldCodes.ShiftedArray(MSequence2, 30))
                 };
             }
         }
@@ -135,5 +160,86 @@ namespace DecodingGoldSequence
             chart.Configuration.DpiStretch = false;
             chart.Refresh();
         }
+
+        private void OnClickConductResearch(object sender, RoutedEventArgs e)
+        {
+            ConductResearch.Visibility = Visibility.Collapsed;
+            ProgressResearch.Visibility = Visibility.Visible;
+
+            _snrResearch = new List<PointD>();
+
+            UpdateParameters();
+            _researchParameters = new Dictionary<string, object>
+            {
+                ["meanOrder"] = (int)MeanCount.Value,
+                ["minSNR"] = (int)DownBorder.Value,
+                ["maxSNR"] = (int)UpBorder.Value,
+                ["snrStep"] = (double)Step.Value
+            };
+            ProgressResearch.Value = 0;
+            ProgressResearch.Maximum = 2 * (int)MeanCount.Value * ((int)UpBorder.Value - (int)DownBorder.Value) / ((double)Step.Value + 1);
+            _bgResearch.RunWorkerAsync();
+        }
+        #region #BackgroundWorker Methods#
+        private void OnDoWorkBackgroundWorkerConductResearch(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            try
+            {
+                var meanOrder = (int)_researchParameters["meanOrder"];
+                var minSNR = (int)_researchParameters["minSNR"];
+                var maxSNR = (int)_researchParameters["maxSNR"];
+                var snrStep = (double)_researchParameters["snrStep"];
+
+                var index = 0;
+                Parallel.For(0, (int)((maxSNR - minSNR) / snrStep + 1), n =>
+                {
+                    double p = 0;
+                    var snr = maxSNR - n * snrStep;
+                    Parallel.For(0, meanOrder, i =>
+                    {
+                        int P = 0;
+                        var _gS = new GenerateSignal(_gSParameters);
+                        int[] bits = _gS.BitSequence;
+                        _gS.GetIQComponents(GoldCodes.ConvertToGoldSequence(bits, _goldSequences));
+                        _gS.MakeNoise(snr);
+                        _gS.GetConvolution(_goldSequences);
+                        string t = string.Join("", _gS.DecodeSignal());
+                        for (int k = 0; k < bits.Length; k++)
+                        {
+                            if (bits[k].ToString() != t[k].ToString()) P++;
+                        }
+                        p += (double)P / (double)bits.Length;
+                        _bgResearch.ReportProgress(++index);
+                    });
+                    _snrResearch.Add(new PointD(snr, (double)p / meanOrder));
+                });
+                _snrResearch = _snrResearch.OrderBy(p => p.X).ToList();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show("Ошибка!", exception.Message);
+            }
+        }
+
+        private void OnRunWorkerCompletedBackgroundWorkerConductResearch(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+        {
+            ConductResearch.Visibility = Visibility.Visible;
+            ProgressResearch.Visibility = Visibility.Collapsed;
+            ChartResearch.Visibility = Visibility.Visible;
+
+            ChartResearch.Plot.Clear();
+            ChartResearch.Plot.AddSignalXY(
+                _snrResearch.Select(p => p.X).ToArray(),
+                _snrResearch.Select(p => p.Y).ToArray(),
+                Color.Red
+            );
+            ChartResearch.Refresh();
+        }
+
+        private void OnProgressChangedBackgroundWorkerConductResearch(object sender, System.ComponentModel.ProgressChangedEventArgs e)
+        {
+            ProgressResearch.Value = e.ProgressPercentage;
+        }
+        #endregion
     }
 }
